@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: yeonsang-quiz
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: ADMIN_PASSWORD
+        value: admin09

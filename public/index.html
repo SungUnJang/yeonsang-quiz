@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#1b1240" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>연상퀴즈 - 생각을 연결해보세요!</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- 반짝이는 별 파티클 (공통 배경 효과) -->
+  <div id="sparkles" aria-hidden="true"></div>
+
+  <!-- ================= 1. 시작 화면 ================= -->
+  <section id="screen-title" class="screen active">
+    <div class="title-blur"></div>
+    <div class="title-wrap" id="titleWrap">
+      <!-- 시작화면 이미지 : public/images/start.png 로 넣어주세요 -->
+      <img id="titleImg" src="images/start.png" alt="" />
+
+      <!-- 이미지가 없을 때 보이는 대체 화면 -->
+      <div class="title-fallback">
+        <div class="fb-q">?</div>
+        <div class="fb-cat">🐱<span>🔍</span></div>
+        <div class="fb-logo"><span class="crown">👑</span><b class="l1">연상</b><b class="l2">퀴즈</b></div>
+        <div class="fb-sub">✦ 생각을 연결해보세요!</div>
+      </div>
+
+      <button class="tbtn tbtn-start" data-act="start"><i>▶</i> 게임 시작</button>
+      <button class="tbtn tbtn-help" data-act="help"><i>📖</i> 게임 설명</button>
+      <button class="tbtn tbtn-exit" data-act="exit"><i>🚪</i> 게임 종료</button>
+    </div>
+  </section>
+
+  <!-- ================= 2. 퀴즈방 목록 ================= -->
+  <section id="screen-rooms" class="screen magic-bg">
+    <div class="rooms-head">
+      <button class="icon-btn" id="btnRoomsBack">←</button>
+      <h1 class="glow-title">퀴즈방 선택</h1>
+      <span class="spacer"></span>
+    </div>
+    <div class="name-box">
+      <label for="nickname">닉네임</label>
+      <input id="nickname" maxlength="8" placeholder="닉네임 (최대 8자)" autocomplete="off" />
+    </div>
+    <div class="room-grid" id="roomGrid"></div>
+    <p class="rooms-tip">🔒 미개설 방은 비밀번호를 입력하면 개설돼요 · 개설된 방은 눌러서 입장!</p>
+  </section>
+
+  <!-- ================= 3. 게임 화면 ================= -->
+  <section id="screen-game" class="screen magic-bg">
+    <!-- 상단 HUD -->
+    <div class="hud">
+      <div class="hud-round">
+        <span class="star">★</span>
+        <div><b id="hudRound">1 / 12</b><small>라운드</small></div>
+      </div>
+      <div class="hud-topic">
+        <svg class="hat" viewBox="0 0 64 48"><path d="M10 38 L34 4 Q38 0 40 6 L44 30 Z" fill="#3b3a9e"/><path d="M14 33 L44 28 L45 33 L16 38Z" fill="#c9a24a"/><ellipse cx="32" cy="38" rx="30" ry="7" fill="#2f2c86"/><rect x="26" y="30" width="8" height="6" rx="1" fill="none" stroke="#f5d27a" stroke-width="2"/></svg>
+        <div class="topic-plate"><span>주제 :</span> <em id="hudTopic">-</em> <span id="hudLen"></span></div>
+      </div>
+      <div class="hud-timer">
+        <svg viewBox="0 0 48 52" class="watch"><circle cx="24" cy="29" r="19" fill="#2a1f4d" stroke="#e8b95a" stroke-width="4"/><rect x="19" y="2" width="10" height="6" rx="2" fill="#e8b95a"/><rect x="22" y="6" width="4" height="5" fill="#e8b95a"/><path d="M24 29 L24 17 M24 29 L32 33" stroke="#fff" stroke-width="3" stroke-linecap="round"/><circle cx="24" cy="29" r="2.5" fill="#e8b95a"/></svg>
+        <b id="hudTimer">60</b>
+      </div>
+      <button class="leave-btn" id="btnLeave" title="방 나가기">나가기</button>
+    </div>
+
+    <!-- 힌트 / 중앙 연출 영역 -->
+    <div class="stage" id="stage">
+      <div class="bubbles" id="bubbles"></div>
+
+      <!-- 대기실 패널 -->
+      <div class="panel center-panel" id="waitPanel">
+        <h2 class="glow-title" id="waitTitle">1번 퀴즈방</h2>
+        <p id="waitCount">참가자 1 / 5</p>
+        <p class="muted" id="waitMsg">방장이 게임을 시작하면 시작돼요!</p>
+        <div class="btn-row">
+          <button class="btn btn-gold" id="btnStart">▶ 게임 시작</button>
+          <button class="btn btn-dark" id="btnClose">방 닫기</button>
+        </div>
+      </div>
+
+      <!-- 라운드 준비 연출 -->
+      <div class="ready-banner" id="readyBanner"><b id="readyText">ROUND 1</b><span>준비!</span></div>
+
+      <!-- 정답 공개 -->
+      <div class="answer-banner" id="answerBanner">
+        <small>정답은</small>
+        <b id="answerText">스파이더맨</b>
+        <span id="nextText">다음 라운드까지 10초</span>
+      </div>
+
+      <!-- 최종 결과 -->
+      <div class="panel center-panel final-panel" id="finalPanel">
+        <h2 class="glow-title">🏆 최종 결과 🏆</h2>
+        <ol id="finalList"></ol>
+        <div class="btn-row">
+          <button class="btn btn-gold" id="btnRestart">🔁 다시 하기</button>
+          <button class="btn btn-dark" id="btnFinalLeave">방 나가기</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 캐릭터 5명 -->
+    <div class="chars" id="chars"></div>
+
+    <!-- 답 입력 -->
+    <form class="answer-bar" id="answerForm" autocomplete="off">
+      <input id="answerInput" maxlength="30" placeholder="정답을 입력하세요 (라운드당 1번!)" enterkeyhint="send" />
+      <button class="btn btn-gold" id="answerBtn" type="submit">정답!</button>
+    </form>
+  </section>
+
+  <!-- ================= 모달: 게임 설명 ================= -->
+  <div class="modal" id="helpModal">
+    <div class="panel modal-box">
+      <h2 class="glow-title">📖 게임 설명</h2>
+      <ul class="help-list">
+        <li>🔮 <b>주제</b>와 정답 <b>글자 수</b>가 먼저 공개돼요.</li>
+        <li>💭 <b id="helpSec">4</b>초마다 정답을 떠올리게 하는 <b>연상 단어</b>가 하나씩 나타나요. (최대 7개)</li>
+        <li>⌛ 한 라운드 제한시간은 <b>60초</b>! 답은 라운드당 <b>한 번만</b> 제출할 수 있어요.</li>
+        <li>🏆 빨리 맞춘 순서대로 <b>80 → 60 → 40 → 20점</b>, 틀리면 0점.</li>
+        <li>⭕❌ 시간이 끝나면 모두의 답이 공개되고 캐릭터 위에 O / X 가 표시돼요.</li>
+        <li>🔁 총 <b>12라운드</b>, 최대 <b>5명</b>까지 함께할 수 있어요.</li>
+        <li>📱 휴대폰 화면이 꺼져도 다시 켜면 자동으로 이어서 참여돼요.</li>
+      </ul>
+      <button class="btn btn-purple" data-close>확인</button>
+    </div>
+  </div>
+
+  <!-- ================= 모달: 비밀번호 ================= -->
+  <div class="modal" id="pwModal">
+    <form class="panel modal-box" id="pwForm" autocomplete="off">
+      <h2 class="glow-title" id="pwTitle">1번 퀴즈방 개설</h2>
+      <p class="muted">퀴즈방을 개설하려면 비밀번호를 입력하세요.</p>
+      <input type="password" id="pwInput" placeholder="비밀번호" />
+      <div class="btn-row">
+        <button type="submit" class="btn btn-gold">개설하기</button>
+        <button type="button" class="btn btn-dark" data-close>취소</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- 종료 화면 -->
+  <div class="modal" id="byeModal">
+    <div class="panel modal-box">
+      <h2 class="glow-title">👋 안녕히 가세요!</h2>
+      <p class="muted">브라우저 탭을 닫으면 종료돼요.</p>
+      <button class="btn btn-purple" data-close>돌아가기</button>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <div id="netBadge">재연결 중…</div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
