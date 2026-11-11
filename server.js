@@ -21,7 +21,7 @@ const CONFIG = {
   MAX_HINTS: 6,
 
   // ⌛ 한 라운드 제한시간(초)
-  ROUND_TIME_SEC: 30,
+  ROUND_TIME_SEC: 25,
 
   // 🔁 총 라운드 수
   TOTAL_ROUNDS: 12,

@@ -22,9 +22,32 @@
   let pendingRoomId = null;
   const now = () => Date.now() + clockOffset;
 
+  /* =================================================================
+   *  🏷️ 퀴즈방 이름 ─ 여기서만 바꾸면 돼요!
+   *  - 숫자(방 번호) : '원하는 이름' 형식으로 쓰세요.
+   *  - 비워두거나 줄을 지우면 기본 이름("1번 퀴즈방")으로 나와요.
+   *  - 방 목록 카드, 비밀번호 창, 개설 알림, 대기실 제목에 모두 적용돼요.
+   * ================================================================= */
+  const ROOM_NAMES = {
+    1: '연습 문제',   // 예) 1: '영화 퀴즈',
+    2: '랜덤 문제',   // 예) 2: '음식 퀴즈',
+    3: '',
+    4: '',
+    5: '',
+    6: '',
+    7: '',
+    8: '',
+    9: '',
+    10: '',
+  };
+  const customName = (id) => (ROOM_NAMES[id] || '').trim();
+  const roomName = (id) => customName(id) || `${id}번 퀴즈방`;
+
   /* ---------- 화면 전환 ---------- */
   function show(id) {
     $$('.screen').forEach((s) => s.classList.toggle('active', s.id === id));
+    document.body.classList.toggle('in-game', id === 'screen-game');
+    if (id !== 'screen-game' && window.SFX) SFX.setMode('calm');
   }
   const current = () => ($('.screen.active') || {}).id;
 
@@ -100,7 +123,7 @@
           else { cls = 'playing'; st = `${r.round}라운드 진행 중`; }
         }
         return `<div class="room-card ${cls} ${myRoom === r.id ? 'mine' : ''}" data-id="${r.id}" style="--i:${i}">
-          <div class="num">${r.id}</div><div class="lbl">번 퀴즈방</div>
+          <div class="num">${r.id}</div><div class="lbl">${customName(r.id) ? esc(customName(r.id)) : '번 퀴즈방'}</div>
           <div class="st">${st}</div>
           <div class="names">${r.open ? esc(r.names.join(', ')) : ''}</div></div>`;
       })
@@ -115,7 +138,7 @@
     if (!name) return;
     if (!r.open) {
       pendingRoomId = id;
-      $('#pwTitle').textContent = `${id}번 퀴즈방 개설`;
+      $('#pwTitle').textContent = `${roomName(id)} 개설`;
       $('#pwInput').value = '';
       openModal('#pwModal');
       setTimeout(() => $('#pwInput').focus(), 100);
@@ -134,7 +157,7 @@
     socket.emit('createRoom', { roomId: pendingRoomId, password: $('#pwInput').value, name }, (res) => {
       if (!res.ok) return toast(res.msg || '개설 실패');
       $('#pwModal').classList.remove('show');
-      toast(`${pendingRoomId}번 퀴즈방이 개설됐어요! ✨`);
+      toast(`[${roomName(pendingRoomId)}] 개설 완료! ✨`);
       show('screen-game');
     });
   });
@@ -385,7 +408,7 @@
     $('#finalPanel').style.display = ph === 'finished' ? 'block' : 'none';
 
     if (ph === 'waiting') {
-      $('#waitTitle').textContent = `${state.roomId}번 퀴즈방 대기실`;
+      $('#waitTitle').textContent = `${roomName(state.roomId)} 대기실`;
       $('#waitCount').textContent = `참가자 ${state.players.length} / ${state.config.maxPlayers}`;
       $('#waitMsg').textContent = isHost ? '모두 모이면 게임을 시작하세요!' : '방장이 게임을 시작하면 시작돼요!';
       $('#btnStart').style.display = isHost ? '' : 'none';
@@ -443,6 +466,7 @@
     if (state.phase === 'playing') sec = Math.max(0, Math.ceil((state.endsAt - now()) / 1000));
     else if (state.phase === 'reveal' || state.phase === 'finished') sec = 0;
     t.textContent = sec;
+    tickSound(sec);
     $('.hud-timer').classList.toggle('danger', state.phase === 'playing' && sec <= 10);
     if (state.phase === 'reveal') {
       const n = Math.max(0, Math.ceil((state.revealEndsAt - now()) / 1000));
@@ -451,6 +475,54 @@
   }
   setInterval(tickClock, 200);
 
+  /* =====================================================================
+   *  🎵 사운드 연결 (소리 자체는 sound.js 에서 만들고 설정해요)
+   * ===================================================================== */
+  const sfx = (name, opt) => window.SFX && SFX.play(name, opt);
+  let lastTickKey = '', timeUpAt = 0, wokeAt = 0;
+
+  // ⏱ 남은 시간 5초부터 째깍, 0초에 땡 (몇 초부터 울릴지는 sound.js 의 TICK_FROM_SEC)
+  function tickSound(sec) {
+    if (!window.SFX || state.phase !== 'playing') return;
+    const key = state.roomId + '-' + state.round + '-' + sec;
+    if (key === lastTickKey) return;
+    lastTickKey = key;
+    if (sec >= 1 && sec <= SFX.tickFrom()) sfx('tick', { n: sec });
+    if (sec === 0) { sfx('timeup'); timeUpAt = Date.now(); }
+  }
+
+  // 서버 상태가 바뀔 때 알맞은 효과음 재생
+  function soundOnState(prev, s) {
+    if (!window.SFX) return;
+    SFX.setMode(s.phase === 'ready' || s.phase === 'playing' ? 'tense' : 'calm');
+    // 화면을 껐다 켠 직후(2초)에는 그동안 지나간 소리를 몰아서 내지 않음
+    const justWoke = Date.now() - wokeAt < 2000;
+    if (!prev || prev.roomId !== s.roomId || justWoke) return;
+    if (prev.phase !== s.phase || prev.round !== s.round) {
+      if (s.phase === 'ready') {
+        sfx('round');
+        if (s.players.some((p) => p.double)) sfx('double', { delay: 1.3 });   // ✨ 두배 찬스
+      }
+      if (s.phase === 'reveal') {
+        const me = s.players.find((p) => p.id === s.me);
+        const delay = Date.now() - timeUpAt < 1500 ? 0.6 : 0;               // '땡' 다음에 이어서
+        sfx(me && me.correct ? 'correct' : 'wrong', { delay });
+      }
+      if (s.phase === 'finished') sfx('final');
+    }
+    if (s.phase === 'playing' && (prev.phase === 'playing' || prev.phase === 'ready') &&
+        s.hints.length > (prev.phase === 'playing' ? prev.hints.length : 0)) sfx('hint');
+  }
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') wokeAt = Date.now(); });
+
+  // 버튼 클릭음
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('#soundBtn')) return;
+    if (e.target.closest('button, .room-card')) sfx('click');
+  });
+  // 🔊 소리 버튼
+  $('#soundBtn').addEventListener('click', () => { if (window.SFX) toast(SFX.cycleMute()); });
+
   // ---- 버튼 ----
   $('#answerForm').addEventListener('submit', (e) => {
     e.preventDefault();
@@ -458,6 +530,7 @@
     if (!text) return;
     socket.emit('submit', { text }, (res) => {
       if (!res.ok) return toast(res.msg || '제출 실패');
+      sfx('submit');
       toast('제출 완료! 결과를 기다려주세요 ✨');
     });
   });
@@ -511,6 +584,7 @@
 
   socket.on('state', (s) => {
     clockOffset = s.serverNow - Date.now();
+    soundOnState(state, s);
     state = s;
     if (current() !== 'screen-game') show('screen-game'); // 재접속 시 바로 게임화면으로
     renderGame();
