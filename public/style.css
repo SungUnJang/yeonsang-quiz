@@ -293,9 +293,9 @@ input { user-select: text; -webkit-user-select: text; }
   position: relative; z-index: 2; line-height: 1.1; word-break: keep-all; white-space: normal;
   font-size: var(--fs, calc(var(--size) * .24));
   /* ☁️ 구름 글씨 ─ 힌트 글씨 모양은 이 블록만 바꾸면 돼요 ☁️ */
-  --cloud-fill:  #e9e3f6;   /* 글씨 속 색 (밝을수록 눈부심 ↑) */
-  --cloud-puff:  #cbbfe8;   /* 몽실몽실한 구름 테두리 색 */
-  --cloud-shade: #9a88cf;   /* 구름 아래쪽 그림자 색 */
+  --cloud-fill:  #f0eef5;   /* 글씨 속 색 (밝을수록 눈부심 ↑) */
+  --cloud-puff:  #d8cdf1;   /* 몽실몽실한 구름 테두리 색 */
+  --cloud-shade: #8664ec;   /* 구름 아래쪽 그림자 색 */
   color: var(--cloud-fill);
   letter-spacing: .02em;
   text-shadow:
