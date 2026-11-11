@@ -201,17 +201,85 @@
   }
   /* ---- 캐릭터 뒷모습 이미지 ----
    *  public/images/char1.png ~ char5.png 를 넣으면 SVG 대신 그 이미지가 사용됩니다.
-   *  (자리 순서: char1=1번 자리 ... char5=5번 자리 / 배경이 투명한 PNG 권장)
-   *  이미지가 없으면 아래 charSVG() 그림이 대신 나와요. */
-  const CHAR_IMG = [1, 2, 3, 4, 5].map((n) => `images/char${n}.png`);
-  const charImgOk = [];
-  CHAR_IMG.forEach((src, i) => {
-    const im = new Image();
-    im.onload = () => { charImgOk[i] = true; lastCharsHtml = ''; if (state) renderChars(); };
-    im.src = src;
-  });
+   *  (자리 순서: char1=1번 자리 ... char5=5번 자리 / .png .webp .jpg .jpeg 모두 가능)
+   *  ✔ 흰색 배경 이미지여도 괜찮아요 → 바깥쪽 흰 배경을 자동으로 투명하게 지우고,
+   *    여백도 자동으로 잘라내서 5명 크기를 똑같이 맞춰요.
+   *  이미지가 없으면 위의 charSVG() 그림이 대신 나와요. */
+  const CHAR_EXTS = ['png', 'webp', 'jpg', 'jpeg', 'PNG', 'JPG'];
+  const charSrc = [];          // 자리별 최종 이미지(dataURL)
+  const WHITE_CUT = 228;       // 이 값보다 밝은 바깥쪽 흰색을 배경으로 판단 (0~255)
+
+  function loadImg(src) {
+    return new Promise((ok, no) => { const im = new Image(); im.onload = () => ok(im); im.onerror = no; im.src = src; });
+  }
+  async function loadCharFile(n) {
+    for (const ext of CHAR_EXTS) {
+      try { return await loadImg(`images/char${n}.${ext}`); } catch (e) { /* 다음 확장자 시도 */ }
+    }
+    return null;
+  }
+  // 바깥 테두리와 연결된 흰 배경만 지움 (캐릭터 안쪽의 흰 머리 등은 외곽선 덕분에 그대로 남음)
+  function cutBackground(im) {
+    const MAX = 640;
+    const k = Math.min(1, MAX / Math.max(im.naturalWidth, im.naturalHeight));
+    const w = Math.round(im.naturalWidth * k), h = Math.round(im.naturalHeight * k);
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const cx = cv.getContext('2d'); cx.drawImage(im, 0, 0, w, h);
+    let data;
+    try { data = cx.getImageData(0, 0, w, h); } catch (e) { return { cv, box: [0, 0, 1, 1] }; }
+    const d = data.data, seen = new Uint8Array(w * h), stack = [];
+    const isBg = (i) => { const o = i * 4; return d[o + 3] < 30 || (Math.min(d[o], d[o + 1], d[o + 2]) > WHITE_CUT && Math.max(d[o], d[o + 1], d[o + 2]) - Math.min(d[o], d[o + 1], d[o + 2]) < 28); };
+    const push = (x, y) => { const i = y * w + x; if (!seen[i] && isBg(i)) { seen[i] = 1; stack.push(i); } };
+    for (let x = 0; x < w; x++) { push(x, 0); push(x, h - 1); }
+    for (let y = 0; y < h; y++) { push(0, y); push(w - 1, y); }
+    while (stack.length) {
+      const i = stack.pop(), x = i % w, y = (i / w) | 0;
+      d[i * 4 + 3] = 0;
+      if (x > 0) push(x - 1, y); if (x < w - 1) push(x + 1, y);
+      if (y > 0) push(x, y - 1); if (y < h - 1) push(x, y + 1);
+    }
+    // 가장자리 흰 테두리(번짐)를 부드럽게
+    for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x; if (seen[i]) continue;
+      if (seen[i - 1] || seen[i + 1] || seen[i - w] || seen[i + w]) {
+        const o = i * 4, lum = (d[o] + d[o + 1] + d[o + 2]) / 3;
+        if (lum > 170) d[o + 3] = Math.round(255 * (255 - lum) / 85);
+      }
+    }
+    cx.putImageData(data, 0, 0);
+    // 캐릭터가 차지하는 영역(비율) 계산
+    let x0 = w, y0 = h, x1 = 0, y1 = 0;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      if (d[(y * w + x) * 4 + 3] > 40) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    }
+    if (x1 <= x0) return { cv, box: [0, 0, 1, 1] };
+    return { cv, box: [x0 / w, y0 / h, (x1 + 1) / w, (y1 + 1) / h] };
+  }
+  (async function prepareChars() {
+    const res = await Promise.all([1, 2, 3, 4, 5].map(async (n) => {
+      const im = await loadCharFile(n);
+      return im ? cutBackground(im) : null;
+    }));
+    const ok = res.filter(Boolean);
+    if (!ok.length) return;
+    // 5장 모두 같은 영역으로 잘라야 캐릭터끼리 크기·바닥선이 맞아요
+    const u = ok.reduce((a, r) => [Math.min(a[0], r.box[0]), Math.min(a[1], r.box[1]), Math.max(a[2], r.box[2]), Math.max(a[3], r.box[3])], [1, 1, 0, 0]);
+    res.forEach((r, i) => {
+      if (!r) return;
+      const { cv } = r;
+      const sx = u[0] * cv.width, sy = u[1] * cv.height, sw = (u[2] - u[0]) * cv.width, sh = (u[3] - u[1]) * cv.height;
+      const out = document.createElement('canvas'); out.width = Math.round(sw); out.height = Math.round(sh);
+      out.getContext('2d').drawImage(cv, sx, sy, sw, sh, 0, 0, out.width, out.height);
+      charSrc[i] = out.toDataURL('image/png');
+    });
+    const first = res.find(Boolean).cv;
+    const ar = ((u[2] - u[0]) * first.width) / ((u[3] - u[1]) * first.height);
+    document.documentElement.style.setProperty('--char-ar', Math.max(0.5, Math.min(1.4, ar)).toFixed(3));
+    lastCharsHtml = '';
+    if (state) renderChars();
+  })();
   function charArt(slot) {
-    return charImgOk[slot] ? `<img class="char-img" src="${CHAR_IMG[slot]}" alt="" draggable="false" />` : charSVG(slot);
+    return charSrc[slot] ? `<img class="char-img" src="${charSrc[slot]}" alt="" draggable="false" />` : charSVG(slot);
   }
 
   const O_SVG = `<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="36" fill="none" stroke="#fff" stroke-width="16"/><circle cx="50" cy="50" r="36" fill="none" stroke="#3ec9ff" stroke-width="10"/></svg>`;
@@ -235,7 +303,7 @@
 
   function wordFont(word) {
     const len = [...word].length;
-    const k = len <= 1 ? 0.36 : len === 2 ? 0.3 : len === 3 ? 0.25 : len === 4 ? 0.21 : len === 5 ? 0.18 : Math.max(0.1, 0.9 / len);
+    const k = len <= 2 ? 0.3 : len === 3 ? 0.27 : len === 4 ? 0.24 : len === 5 ? 0.21 : len <= 7 ? 0.18 : 0.15;
     return `calc(var(--size) * ${k})`;
   }
 
@@ -250,8 +318,10 @@
       b.className = 'bubble';
       b.style.setProperty('--rot', RING_ROT[i % RING_ROT.length] + 'deg');
       b.style.setProperty('--delay', -i * 0.7 + 's');
-      b.innerHTML = `<span class="ring back"></span><span class="orb"></span><span class="ring"></span>
-        <span class="num">${i + 1}</span><span class="word" style="--fs:${wordFont(hints[i])}">${esc(hints[i])}</span>`;
+      // 동그란 구슬 대신 몽글몽글한 마법 안개 + 반짝이 (번호 없이 단어만)
+      b.innerHTML = `<span class="mist"></span><span class="mist m2"></span>
+        <span class="spark s1">✦</span><span class="spark s2">✧</span><span class="spark s3">✦</span>
+        <span class="word" style="--fs:${wordFont(hints[i])}">${esc(hints[i])}</span>`;
       placeBubble(b, i);
       box.appendChild(b);
     }
