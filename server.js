@@ -18,7 +18,7 @@ const CONFIG = {
   HINT_INTERVAL_SEC: 4,
 
   // 💡 한 라운드에 보여줄 최대 힌트 개수
-  MAX_HINTS: 7,
+  MAX_HINTS: 6,
 
   // ⌛ 한 라운드 제한시간(초)
   ROUND_TIME_SEC: 60,
@@ -40,6 +40,12 @@ const CONFIG = {
 
   // ⚡ 모든 접속자가 답을 제출하면 60초를 기다리지 않고 바로 공개할지
   END_EARLY_WHEN_ALL_SUBMITTED: true,
+
+  // ✨ 두배 찬스 라운드 (이 라운드에서만 두배 찬스 발동)
+  DOUBLE_ROUNDS: [5, 7, 9, 12],
+  //    1등 점수의 절반 "미만"인 플레이어가 대상  (예: 1등 100점 → 50점 미만)
+  //    대상자가 맞히면 그 라운드 획득 점수 × DOUBLE_MULTIPLIER
+  DOUBLE_MULTIPLIER: 2,
 
   // 🏠 퀴즈방 개수
   ROOM_COUNT: 10,
@@ -86,6 +92,7 @@ function getQuizList(roomId) {
 
 /* ---------------- 방 관리 ---------------- */
 const rooms = new Map(); // roomId(Number) -> room
+const kickedNotice = new Map(); // 연결이 끊긴 채 내보내진 플레이어에게 재접속 시 알려주기용
 
 function createRoom(id) {
   return {
@@ -102,6 +109,8 @@ function createRoom(id) {
     revealEndsAt: 0,
     hintCount: 0,
     answers: {}, // playerId -> { text, at, correct, rank, gained }
+    doubleIds: [], // 이번 라운드 두배 찬스 대상 playerId 목록
+    banned: new Set(), // 방장이 내보낸 플레이어 (이 방에 다시 못 들어옴)
     timer: null,
   };
 }
@@ -166,6 +175,7 @@ function stateFor(room, viewerId) {
     length: q ? [...String(q.answer).replace(/\s/g, '')].length : 0,
     hints: q ? q.hints.slice(0, visibleHintCount(room)) : [],
     answer: reveal && q ? q.answer : null,
+    doubleRound: room.doubleIds.length > 0,
     config: {
       hintInterval: CONFIG.HINT_INTERVAL_SEC,
       maxHints: CONFIG.MAX_HINTS,
@@ -186,6 +196,7 @@ function stateFor(room, viewerId) {
         correct: reveal ? !!(a && a.correct) : null,
         gained: reveal ? (a ? a.gained : 0) : null,
         rank: reveal && a && a.correct ? a.rank : null,
+        double: room.doubleIds.includes(p.id),
       };
     }),
   };
@@ -229,11 +240,20 @@ function startRound(room) {
   room.quiz = room.quizList[room.round - 1];
   room.answers = {};
   room.hintCount = 0;
+  room.doubleIds = pickDoublePlayers(room);
   room.phase = 'ready';
   room.readyEndsAt = Date.now() + CONFIG.READY_SEC * 1000;
   startTicker(room);
   broadcastState(room);
   broadcastRooms();
+}
+
+// ✨ 두배 찬스 대상 고르기 : 지정 라운드 + (점수 × 2 < 1등 점수)
+function pickDoublePlayers(room) {
+  if (!CONFIG.DOUBLE_ROUNDS.includes(room.round)) return [];
+  const top = Math.max(0, ...room.players.map((p) => p.score));
+  if (top <= 0) return [];
+  return room.players.filter((p) => p.score * 2 < top).map((p) => p.id);
 }
 
 function startPlaying(room) {
@@ -279,6 +299,7 @@ function freeSlot(room) {
 function removePlayer(room, playerId) {
   room.players = room.players.filter((p) => p.id !== playerId);
   delete room.answers[playerId];
+  room.doubleIds = room.doubleIds.filter((id) => id !== playerId);
   if (room.players.length === 0) {
     stopTicker(room);
     rooms.delete(room.id);
@@ -311,7 +332,9 @@ io.on('connection', (socket) => {
       broadcastState(room);
       ack && ack({ ok: true, inRoom: room.id });
     } else {
-      ack && ack({ ok: true, inRoom: null });
+      const kickedFrom = kickedNotice.get(playerId);
+      kickedNotice.delete(playerId);
+      ack && ack({ ok: true, inRoom: null, kickedFrom: kickedFrom || null });
     }
     socket.emit('rooms', roomSummary());
   });
@@ -359,6 +382,7 @@ io.on('connection', (socket) => {
       ack({ ok: true });
       return broadcastState(room);
     }
+    if (room.banned.has(playerId)) return ack({ ok: false, msg: '방장이 내보낸 방에는 다시 들어갈 수 없어요.' });
     if (room.phase !== 'waiting') return ack({ ok: false, msg: '이미 게임이 진행 중인 방이에요.' });
     const slot = freeSlot(room);
     if (slot < 0) return ack({ ok: false, msg: `방이 가득 찼어요! (최대 ${CONFIG.MAX_PLAYERS}명)` });
@@ -408,6 +432,7 @@ io.on('connection', (socket) => {
     if (correct) {
       rank = Object.values(room.answers).filter((a) => a.correct).length + 1;
       gained = CONFIG.SCORES[rank - 1] || 0;
+      if (room.doubleIds.includes(player.id)) gained *= CONFIG.DOUBLE_MULTIPLIER; // ✨ 두배 찬스
     }
     room.answers[player.id] = { text: t, at: Date.now(), correct, rank, gained };
     ack({ ok: true });
@@ -426,11 +451,33 @@ io.on('connection', (socket) => {
     room.round = 0;
     room.quiz = null;
     room.answers = {};
+    room.doubleIds = [];
     room.quizList = getQuizList(room.id);
     room.players.forEach((p) => (p.score = 0));
     ack({ ok: true });
     broadcastState(room);
     broadcastRooms();
+  });
+
+  // 👢 플레이어 내보내기 (방장만, 언제든 가능)
+  socket.on('kick', ({ targetId } = {}, ack = () => {}) => {
+    const found = findPlayerRoom(socket.data.playerId);
+    if (!found) return ack({ ok: false });
+    const { room } = found;
+    if (room.hostId !== socket.data.playerId) return ack({ ok: false, msg: '방장만 내보낼 수 있어요.' });
+    if (targetId === socket.data.playerId) return ack({ ok: false, msg: '자기 자신은 내보낼 수 없어요.' });
+    const target = room.players.find((p) => p.id === targetId);
+    if (!target) return ack({ ok: false, msg: '이미 나간 플레이어예요.' });
+    room.banned.add(target.id);
+    if (target.connected && target.socketId) {
+      io.to(target.socketId).emit('kicked', { roomId: room.id });
+      const ts = io.sockets.sockets.get(target.socketId);
+      if (ts) ts.leave('room-' + room.id);
+    } else {
+      kickedNotice.set(target.id, room.id);
+    }
+    removePlayer(room, target.id);
+    ack({ ok: true, name: target.name });
   });
 
   // 방 나가기

@@ -13,7 +13,8 @@ yeonsang-quiz/
    ├─ app.js
    └─ images/
       ├─ start.png    ← 시작화면 이미지 (직접 넣기)
-      └─ bg.png       ← 게임 배경 이미지 (직접 넣기)
+      ├─ bg.png       ← 게임 배경 이미지 (직접 넣기)
+      └─ char1~5.png  ← 캐릭터 뒷모습 이미지 (직접 넣기, 선택)
 ```
 
 ## 로컬 실행

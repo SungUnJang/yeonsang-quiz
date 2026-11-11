@@ -86,7 +86,10 @@
       </div>
 
       <!-- 라운드 준비 연출 -->
-      <div class="ready-banner" id="readyBanner"><b id="readyText">ROUND 1</b><span>준비!</span></div>
+      <div class="ready-banner" id="readyBanner"><b id="readyText">ROUND 1</b><span>준비!</span>
+        <!-- 두배 찬스 문구 (대상자가 있을 때만 표시) -->
+        <div class="double-chance" id="doubleChance"><em>✨ 두배 찬스 ✨</em><small id="doubleNames"></small></div>
+      </div>
 
       <!-- 정답 공개 -->
       <div class="answer-banner" id="answerBanner">
@@ -122,9 +125,10 @@
       <h2 class="glow-title">📖 게임 설명</h2>
       <ul class="help-list">
         <li>🔮 <b>주제</b>와 정답 <b>글자 수</b>가 먼저 공개돼요.</li>
-        <li>💭 <b id="helpSec">4</b>초마다 정답을 떠올리게 하는 <b>연상 단어</b>가 하나씩 나타나요. (최대 7개)</li>
+        <li>💭 <b id="helpSec">4</b>초마다 정답을 떠올리게 하는 <b>연상 단어</b>가 하나씩 나타나요. (최대 6개)</li>
         <li>⌛ 한 라운드 제한시간은 <b>60초</b>! 답은 라운드당 <b>한 번만</b> 제출할 수 있어요.</li>
         <li>🏆 빨리 맞춘 순서대로 <b>80 → 60 → 40 → 20점</b>, 틀리면 0점.</li>
+        <li>✨ <b>5·7·9·12라운드</b>에는 1등 점수의 절반 미만인 플레이어에게 <b>두배 찬스</b>! 맞히면 점수 ×2</li>
         <li>⭕❌ 시간이 끝나면 모두의 답이 공개되고 캐릭터 위에 O / X 가 표시돼요.</li>
         <li>🔁 총 <b>12라운드</b>, 최대 <b>5명</b>까지 함께할 수 있어요.</li>
         <li>📱 휴대폰 화면이 꺼져도 다시 켜면 자동으로 이어서 참여돼요.</li>

@@ -199,17 +199,34 @@
     }
     return `<svg viewBox="0 -14 120 148" xmlns="http://www.w3.org/2000/svg">${inner}</svg>`;
   }
+  /* ---- 캐릭터 뒷모습 이미지 ----
+   *  public/images/char1.png ~ char5.png 를 넣으면 SVG 대신 그 이미지가 사용됩니다.
+   *  (자리 순서: char1=1번 자리 ... char5=5번 자리 / 배경이 투명한 PNG 권장)
+   *  이미지가 없으면 아래 charSVG() 그림이 대신 나와요. */
+  const CHAR_IMG = [1, 2, 3, 4, 5].map((n) => `images/char${n}.png`);
+  const charImgOk = [];
+  CHAR_IMG.forEach((src, i) => {
+    const im = new Image();
+    im.onload = () => { charImgOk[i] = true; lastCharsHtml = ''; if (state) renderChars(); };
+    im.src = src;
+  });
+  function charArt(slot) {
+    return charImgOk[slot] ? `<img class="char-img" src="${CHAR_IMG[slot]}" alt="" draggable="false" />` : charSVG(slot);
+  }
+
   const O_SVG = `<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="36" fill="none" stroke="#fff" stroke-width="16"/><circle cx="50" cy="50" r="36" fill="none" stroke="#3ec9ff" stroke-width="10"/></svg>`;
   const X_SVG = `<svg viewBox="0 0 100 100"><path d="M20 20 L80 80 M80 20 L20 80" stroke="#fff" stroke-width="20" stroke-linecap="round"/><path d="M20 20 L80 80 M80 20 L20 80" stroke="#ff3d63" stroke-width="12" stroke-linecap="round"/></svg>`;
 
   // ---- 힌트 버블 위치 (x%, y%, 큰버블여부) ----
-  const POS_WIDE = [[50, 42, 1], [24, 30], [76, 30], [12, 66], [88, 66], [33, 78], [67, 78]];
-  const POS_TALL = [[50, 16, 1], [24, 35], [76, 35], [50, 52], [24, 70], [76, 70], [50, 87]];
-  const RING_ROT = [-10, 14, -16, 18, -14, 10, -8];
+  // 힌트 6개 배치
+  const POS_WIDE = [[50, 42, 1], [24, 30], [76, 30], [12, 68], [88, 68], [50, 84]];
+  const POS_TALL = [[50, 17, 1], [24, 40], [76, 40], [24, 64], [76, 64], [50, 84]];
+  const RING_ROT = [-10, 14, -16, 18, -14, 10];
   const isTall = () => window.innerWidth / window.innerHeight < 1;
 
   function placeBubble(el, i) {
-    const p = (isTall() ? POS_TALL : POS_WIDE)[i % 7];
+    const list = isTall() ? POS_TALL : POS_WIDE;
+    const p = list[i % list.length];
     el.style.setProperty('--x', p[0] + '%');
     el.style.setProperty('--y', p[1] + '%');
     el.classList.toggle('big', !!p[2]);
@@ -231,14 +248,14 @@
     for (let i = have; i < hints.length; i++) {
       const b = document.createElement('div');
       b.className = 'bubble';
-      b.style.setProperty('--rot', RING_ROT[i % 7] + 'deg');
+      b.style.setProperty('--rot', RING_ROT[i % RING_ROT.length] + 'deg');
       b.style.setProperty('--delay', -i * 0.7 + 's');
       b.innerHTML = `<span class="ring back"></span><span class="orb"></span><span class="ring"></span>
         <span class="num">${i + 1}</span><span class="word" style="--fs:${wordFont(hints[i])}">${esc(hints[i])}</span>`;
       placeBubble(b, i);
       box.appendChild(b);
     }
-    box.style.opacity = state.phase === 'reveal' ? '0.45' : '1';
+    box.style.opacity = state.phase === 'reveal' ? '0.3' : '1';
   }
 
   let lastCharsHtml = '';
@@ -246,11 +263,12 @@
     const players = state.players;
     const top = Math.max(0, ...players.map((p) => p.score));
     const reveal = state.phase === 'reveal';
+    const isHost = state.hostId === state.me;
     let html = '';
     for (let s = 0; s < state.config.maxPlayers; s++) {
       const p = players.find((x) => x.slot === s);
       if (!p) {
-        html += `<div class="char empty" data-slot="${s}"><div class="avatar">${charSVG(s)}</div>
+        html += `<div class="char empty" data-slot="${s}"><div class="avatar">${charArt(s)}</div>
           <div class="plate"><div class="nm">빈 자리</div><div class="sc">-</div></div></div>`;
         continue;
       }
@@ -262,12 +280,16 @@
       if (reveal) {
         speech = p.answer ? `<div class="speech">${esc(p.answer)}</div>` : `<div class="speech none">무응답</div>`;
         mark = `<div class="mark ${p.correct ? 'o' : 'x'}">${p.correct ? O_SVG : X_SVG}</div>`;
-        if (p.gained > 0) gain = `<div class="gain">+${p.gained}</div>`;
+        if (p.gained > 0) gain = `<div class="gain ${p.double ? 'dbl' : ''}">+${p.gained}</div>`;
       }
+      // ✨ 두배 찬스 대상 : 캐릭터 뒤에 x2
+      const x2 = p.double && state.phase !== 'waiting' && state.phase !== 'finished' ? '<div class="x2">x2</div>' : '';
+      // 👢 방장에게만 보이는 내보내기 버튼
+      const kick = isHost && !me ? `<button class="kick-btn" data-kick="${esc(p.id)}" data-name="${esc(p.name)}" title="내보내기">✕</button>` : '';
       const badge = top > 0 && p.score === top ? '👑' : '⭐';
-      html += `<div class="char ${me ? 'me' : ''} ${p.connected ? '' : 'off'}" data-slot="${s}">
-        ${speech}
-        <div class="avatar">${charSVG(s)}${mark}${gain}${p.connected ? '' : '<span class="off-tag">연결 끊김</span>'}</div>
+      html += `<div class="char ${me ? 'me' : ''} ${p.connected ? '' : 'off'} ${x2 ? 'double' : ''}" data-slot="${s}">
+        ${speech}${kick}
+        <div class="avatar">${x2}${charArt(s)}${mark}${gain}${p.connected ? '' : '<span class="off-tag">연결 끊김</span>'}</div>
         <div class="plate"><span class="badge">${badge}</span>${p.id === state.hostId ? '<span class="host">방장</span>' : ''}
           <div class="nm">${esc(p.name)}${me ? ' (나)' : ''}</div><div class="sc">${p.score}</div></div></div>`;
     }
@@ -305,6 +327,11 @@
         rt.textContent = `ROUND ${state.round}`;
         rt.style.animation = 'none'; void rt.offsetWidth; rt.style.animation = '';
       }
+      // ✨ 두배 찬스 문구
+      const dc = $('#doubleChance');
+      const dNames = state.players.filter((p) => p.double).map((p) => p.name);
+      dc.style.display = dNames.length ? 'block' : 'none';
+      $('#doubleNames').textContent = dNames.join(' · ');
     }
     if (ph === 'reveal') $('#answerText').textContent = state.answer;
     if (ph === 'finished') {
@@ -364,6 +391,17 @@
       toast('제출 완료! 결과를 기다려주세요 ✨');
     });
   });
+  // 👢 내보내기 (방장)
+  $('#chars').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-kick]');
+    if (!b) return;
+    if (!confirm(`${b.dataset.name} 님을 내보낼까요?\n(내보낸 플레이어는 이 방에 다시 들어올 수 없어요)`)) return;
+    socket.emit('kick', { targetId: b.dataset.kick }, (r) => {
+      if (r.ok) toast(`${r.name} 님을 내보냈어요.`);
+      else if (r.msg) toast(r.msg);
+    });
+  });
+
   $('#btnStart').onclick = () => socket.emit('startGame', {}, (r) => !r.ok && r.msg && toast(r.msg));
   $('#btnRestart').onclick = () => socket.emit('restart', {}, (r) => !r.ok && r.msg && toast(r.msg));
   $('#btnClose').onclick = () => {
@@ -393,7 +431,7 @@
   function hello() {
     socket.emit('hello', { playerId }, (res) => {
       if (res && res.ok && !res.inRoom && current() === 'screen-game') {
-        toast('방이 사라졌어요. 목록으로 돌아갑니다.');
+        toast(res.kickedFrom ? '방장이 퀴즈방에서 내보냈어요.' : '방이 사라졌어요. 목록으로 돌아갑니다.');
         leaveToRooms();
       }
     });
@@ -408,6 +446,7 @@
     renderGame();
   });
   socket.on('rooms', (list) => { rooms = list; renderRooms(); });
+  socket.on('kicked', () => { toast('방장이 퀴즈방에서 내보냈어요.'); leaveToRooms(); });
   socket.on('roomClosed', () => { toast('방장이 퀴즈방을 닫았어요.'); leaveToRooms(); });
 
   // 휴대폰 화면을 다시 켰을 때 즉시 재접속/동기화
