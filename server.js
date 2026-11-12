@@ -15,13 +15,13 @@ const { QUIZZES, SAMPLE } = require('./quizzes');
 const CONFIG = {
   // ⏱ 힌트 단어가 나오는 간격(초).  4 → 4초마다 힌트 1개씩 등장
   //    예) 3으로 바꾸면 3초마다, 5로 바꾸면 5초마다 등장
-  HINT_INTERVAL_SEC: 3,
+  HINT_INTERVAL_SEC: 4,
 
   // 💡 한 라운드에 보여줄 최대 힌트 개수
   MAX_HINTS: 6,
 
   // ⌛ 한 라운드 제한시간(초)
-  ROUND_TIME_SEC: 25,
+  ROUND_TIME_SEC: 60,
 
   // 🔁 총 라운드 수
   TOTAL_ROUNDS: 12,
@@ -33,10 +33,10 @@ const CONFIG = {
   SCORES: [80, 60, 40, 20],
 
   // 🎬 라운드 시작 전 "ROUND n 준비!" 연출 시간(초)
-  READY_SEC: 2,
+  READY_SEC: 3,
 
   // 📢 정답 공개 화면 유지 시간(초) → 이후 자동으로 다음 라운드
-  REVEAL_SEC: 5,
+  REVEAL_SEC: 10,
 
   // ⚡ 모든 접속자가 답을 제출하면 60초를 기다리지 않고 바로 공개할지
   END_EARLY_WHEN_ALL_SUBMITTED: true,
