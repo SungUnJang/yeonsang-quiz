@@ -308,21 +308,69 @@
   const O_SVG = `<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="36" fill="none" stroke="#fff" stroke-width="16"/><circle cx="50" cy="50" r="36" fill="none" stroke="#3ec9ff" stroke-width="10"/></svg>`;
   const X_SVG = `<svg viewBox="0 0 100 100"><path d="M20 20 L80 80 M80 20 L20 80" stroke="#fff" stroke-width="20" stroke-linecap="round"/><path d="M20 20 L80 80 M80 20 L20 80" stroke="#ff3d63" stroke-width="12" stroke-linecap="round"/></svg>`;
 
-  // ---- 힌트 버블 위치 (x%, y%, 큰버블여부) ----
-  // 힌트 6개 배치
-  const POS_WIDE = [[50, 42, 1], [24, 30], [76, 30], [12, 68], [88, 68], [50, 84]];
-  const POS_TALL = [[50, 17, 1], [24, 40], [76, 40], [24, 64], [76, 64], [50, 84]];
+  // ---- 힌트 버블 위치 : 라운드마다 랜덤 배치 ----
+  // 화면을 칸으로 나눠두고, 라운드마다 칸을 섞어서 골라요(+살짝 흔들기) → 겹치지 않으면서 매번 다른 위치!
+  // 같은 라운드 안에서는 위치가 고정돼요(화면 회전/크기 변경해도 그대로).
+  //  - 가로 화면 : 3열 × 3행 = 9칸 중 6칸
+  //  - 세로 화면 : 5줄 중 1줄은 큰 힌트(가운데), 나머지 4줄 × 2칸 중 5칸
+  const WIDE_X = [18, 50, 82], WIDE_Y = [22, 50, 78];
+  const TALL_X = [27, 73], TALL_Y = [14, 33, 52, 71, 89];
+  const JITTER = { wide: [5, 4], tall: [4, 2.5] };   // 흔들림 범위(x%, y%)
   const RING_ROT = [-10, 14, -16, 18, -14, 10];
   const isTall = () => window.innerWidth / window.innerHeight < 1;
 
+  // 라운드별로 항상 같은 결과가 나오는 랜덤
+  function seededRandom(str) {
+    let h = 1779033703 ^ str.length;
+    for (let i = 0; i < str.length; i++) { h = Math.imul(h ^ str.charCodeAt(i), 3432918353); h = (h << 13) | (h >>> 19); }
+    return () => {
+      h = Math.imul(h ^ (h >>> 16), 2246822507); h = Math.imul(h ^ (h >>> 13), 3266489909);
+      return ((h ^= h >>> 16) >>> 0) / 4294967296;
+    };
+  }
+  function shuffle(arr, rnd) {
+    for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; }
+    return arr;
+  }
+  let layoutCache = { key: '', list: null };
+  function bubbleLayout() {
+    const tall = isTall();
+    const key = `${state.roomId}-${state.round}-${state.topic}-${tall ? 't' : 'w'}`;
+    if (layoutCache.key === key) return layoutCache.list;
+    const rnd = seededRandom(key);
+    const list = [];
+    if (tall) {
+      const rows = shuffle([...TALL_Y.keys()], rnd);
+      const bigRow = rows[0];
+      list.push([50, TALL_Y[bigRow], 1]);
+      const cells = [];
+      TALL_Y.forEach((y, r) => { if (r !== bigRow) TALL_X.forEach((x) => cells.push([x, y])); });
+      list.push(...shuffle(cells, rnd));
+    } else {
+      const cells = [];
+      WIDE_Y.forEach((y) => WIDE_X.forEach((x) => cells.push([x, y])));
+      shuffle(cells, rnd);
+      cells[0] = [...cells[0], 1];          // 첫 힌트는 큰 버블
+      list.push(...cells);
+    }
+    const [jx, jy] = JITTER[tall ? 'tall' : 'wide'];
+    const out = list.map(([x, y, big]) => [
+      big && tall ? 50 : x + (rnd() * 2 - 1) * jx,
+      y + (rnd() * 2 - 1) * jy,
+      big,
+    ]);
+    layoutCache = { key, list: out };
+    return out;
+  }
+
   function placeBubble(el, i) {
-    const list = isTall() ? POS_TALL : POS_WIDE;
+    const list = bubbleLayout();
     const p = list[i % list.length];
-    el.style.setProperty('--x', p[0] + '%');
-    el.style.setProperty('--y', p[1] + '%');
+    el.style.setProperty('--x', p[0].toFixed(1) + '%');
+    el.style.setProperty('--y', p[1].toFixed(1) + '%');
     el.classList.toggle('big', !!p[2]);
   }
-  window.addEventListener('resize', () => $$('#bubbles .bubble').forEach((b, i) => placeBubble(b, i)));
+  window.addEventListener('resize', () => { if (state) $$('#bubbles .bubble').forEach((b, i) => placeBubble(b, i)); });
 
   function wordFont(word) {
     const len = [...word].length;
@@ -426,7 +474,13 @@
       dc.style.display = dNames.length ? 'block' : 'none';
       $('#doubleNames').textContent = dNames.join(' · ');
     }
-    if (ph === 'reveal') $('#answerText').textContent = state.answer;
+    if (ph === 'reveal') {
+      // 정답이 길면 글씨를 줄여서 한 화면에 다 보이게
+      const at = $('#answerText');
+      at.textContent = state.answer;
+      const len = [...String(state.answer || '')].length;
+      at.style.fontSize = len <= 5 ? '' : `clamp(26px, ${(50 / len).toFixed(2)}vw, ${Math.round(600 / len)}px)`;
+    }
     if (ph === 'finished') {
       const sorted = [...state.players].sort((a, b) => b.score - a.score);
       const medals = ['🥇', '🥈', '🥉', '4', '5'];

@@ -148,8 +148,11 @@ input { user-select: text; -webkit-user-select: text; }
   margin: 14px 0; display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 18px;
   background: var(--glass); border: 2px solid rgba(190, 160, 255, .5); border-radius: 999px;
   box-shadow: 0 0 18px rgba(140, 92, 246, .45);
+  max-width: 100%;
 }
-.name-box label { color: var(--gold2); font-size: 17px; }
+/* '닉네임' 글자가 줄바꿈으로 깨지지 않게 */
+.name-box label { color: var(--gold2); font-size: 17px; white-space: nowrap; flex-shrink: 0; }
+.name-box input { flex: 1 1 auto; width: min(58vw, 240px); }
 .name-box input, #pwInput, #answerInput {
   border: 0; outline: 0; font-size: 18px; padding: 10px 16px; border-radius: 999px;
   background: rgba(255, 255, 255, .92); color: #2b1a5c; min-width: 0;
@@ -341,14 +344,15 @@ input { user-select: text; -webkit-user-select: text; }
 .answer-banner {
   /* 정답 공개 : 화면 가운데에 크게 */
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center; display: none; z-index: 6;
-  max-width: 94vw; padding: clamp(14px, 2.6vh, 26px) clamp(30px, 6vw, 80px) clamp(14px, 2.4vh, 24px); border-radius: 28px;
+  /* left:50% 이라 기본 폭이 화면 절반으로 줄어드는 문제 → 내용 크기대로, 최대 화면 94%까지 */
+  width: max-content; max-width: 94vw; padding: clamp(14px, 2.6vh, 26px) clamp(30px, 6vw, 80px) clamp(14px, 2.4vh, 24px); border-radius: 28px;
   background: linear-gradient(180deg, rgba(42, 27, 94, .96), rgba(23, 13, 61, .96));
   border: 4px solid #e2b85c; box-shadow: 0 0 0 4px #6b46d8, 0 0 0 7px #e2b85c, 0 0 60px rgba(255, 200, 80, .75), inset 0 0 30px rgba(140, 90, 255, .5);
   animation: answerIn .6s cubic-bezier(.2, 1.6, .4, 1) both;
 }
 .answer-banner small { display: block; font-size: clamp(18px, 2.6vw, 28px); color: #e5dcff; text-shadow: 0 0 8px #b794ff; }
 .answer-banner b {
-  display: block; font-weight: 400; font-size: clamp(52px, 10vw, 120px); line-height: 1.15; word-break: keep-all;
+  display: block; font-weight: 400; font-size: clamp(52px, 10vw, 120px); line-height: 1.15; word-break: keep-all; overflow-wrap: anywhere;
   background: linear-gradient(180deg, #fff6c8, #ffc93c 60%, #f08a12); -webkit-background-clip: text; background-clip: text; color: transparent;
   filter: drop-shadow(0 0 14px rgba(255, 190, 60, .85)) drop-shadow(0 4px 0 #5a2c00);
 }
@@ -440,7 +444,9 @@ input { user-select: text; -webkit-user-select: text; }
 /* 제출 표시 / 답 말풍선 / O X */
 .speech {
   position: absolute; bottom: 92%; left: 50%; transform: translateX(-50%); z-index: 3;
-  max-width: 130%; padding: 5px 12px; border-radius: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  /* 긴 답도 잘리지 않고 여러 줄로 */
+  width: max-content; max-width: 130%; padding: 5px 12px; border-radius: 14px; line-height: 1.15; text-align: center;
+  white-space: normal; word-break: keep-all; overflow-wrap: anywhere;
   font-size: clamp(13px, 1.8vw, 20px); color: #2b1a5c; background: #fff; box-shadow: 0 0 12px rgba(255, 255, 255, .7);
   animation: popUp .35s ease both;
 }
